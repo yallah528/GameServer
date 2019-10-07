@@ -44,6 +44,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private float _autoAttackCurrentDelay;
         public bool IsAttacking { get; set; }
         public bool HasMadeInitialAttack { get; set; }
+        public IInventoryManager Inventory { get; protected set; }
         private bool _nextAttackFlag;
         private uint _autoAttackProjId;
         public MoveOrder MoveOrder { get; set; }
@@ -464,7 +465,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                                 _autoAttackProjId
                             );
                             _game.ObjectManager.AddObject(p);
-                            _game.PacketNotifier.NotifyShowProjectile(p);
+                            _game.PacketNotifier.NotifyForceCreateMissile(p);
                         }
                         else
                         {
@@ -609,7 +610,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 //Find optimal position...
                 foreach (var point in targetCircle.Points.OrderBy(x => GetDistanceTo(X, Y)))
                 {
-                    if (!_game.Map.NavGrid.IsWalkable(point))
+                    if (!_game.Map.NavGrid.IsWalkable(point) && !_game.Map.NavGrid.IsSeeThrough(point))
                         continue;
                     var positionUsed = false;
                     foreach (var circlePoly in usedPositions)
