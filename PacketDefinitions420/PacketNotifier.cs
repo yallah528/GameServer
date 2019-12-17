@@ -21,6 +21,9 @@ using ViewRequest = GameServerCore.Packets.PacketDefinitions.Requests.ViewReques
 using LeaguePackets.Game.Common;
 using LeaguePackets.Common;
 using System.Linq;
+using static GameServerCore.Content.HashFunctions;
+using System.Text;
+using Force.Crc32;
 
 namespace PacketDefinitions420
 {
@@ -37,12 +40,36 @@ namespace PacketDefinitions420
 
         public void NotifyLaneMinionSpawned(ILaneMinion m, TeamId team)
         {
-            var ms = new LaneMinionSpawn(_navGrid, m);
-            _packetHandlerManager.BroadcastPacketTeam(team, ms, Channel.CHL_S2C);
+            var p = new LeaguePackets.Game.Barrack_SpawnUnit();
+            p.SenderNetID = m.NetId;
+            p.ObjectID = m.NetId;
+            p.ObjectNodeID = 0x40; // TODO: check this
+            p.BarracksNetID = 0xFF000000 | Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(m.BarracksName));
+            p.WaveCount = 1;
+            p.MinionType = (byte)m.MinionSpawnType;
+            p.DamageBonus = 10;
+            p.HealthBonus = 7;
+            p.MinionLevel = 1;
+
+            
+            
+            var md = new MovementDataNormal();
+            md.Waypoints = Convertors.Vector2ToWaypoint(m.Waypoints,_navGrid);
+            md.TeleportNetID = m.NetId;
+            md.HasTeleportID = false;
+            md.SyncID = (int) m.SyncId;
+
+            var visionPacket = new OnEnterVisiblityClient();
+            visionPacket.MovementData = md;
+            visionPacket.LookAtPosition = new Vector3(1, 0, 0);
+            visionPacket.Packets.Add(p);
+            visionPacket.SenderNetID = m.NetId;
+
+            _packetHandlerManager.BroadcastPacketTeam(team, visionPacket.GetBytes(), Channel.CHL_S2C);
             NotifyEnterLocalVisibilityClient(m);
         }
 
-        public void NotifyGameEnd(Vector3 cameraPosition, INexus nexus, List<Pair<uint, ClientInfo>> players)
+        public void NotifyGameEnd(Vector3 cameraPosition, INexus nexus, List<Tuple<uint, ClientInfo>> players)
         {
             var losingTeam = nexus.Team;
 
@@ -177,25 +204,25 @@ namespace PacketDefinitions420
             _packetHandlerManager.SendPacket(userId, answer, Channel.CHL_S2C, PacketFlags.None);
         }
 
-        public void NotifySynchVersion(int userId, List<Pair<uint, ClientInfo>> players, string version, string gameMode, int mapId)
+        public void NotifySynchVersion(int userId, List<Tuple<uint, ClientInfo>> players, string version, string gameMode, int mapId)
         {
             var response = new SynchVersionResponse(players, version, "CLASSIC", mapId);
             _packetHandlerManager.SendPacket(userId, response, Channel.CHL_S2C);
         }
 
-        public void NotifyLoadScreenInfo(int userId, List<Pair<uint,ClientInfo>> players)
+        public void NotifyLoadScreenInfo(int userId, List<Tuple<uint,ClientInfo>> players)
         {
             var screenInfo = new LoadScreenInfo(players);
             _packetHandlerManager.SendPacket(userId, screenInfo, Channel.CHL_LOADING_SCREEN);
         }
 
-        public void NotifyLoadScreenPlayerName(int userId, Pair<uint,ClientInfo> player)
+        public void NotifyLoadScreenPlayerName(int userId, Tuple<uint,ClientInfo> player)
         {
             var loadName = new LoadScreenPlayerName(player);
             _packetHandlerManager.SendPacket(userId, loadName, Channel.CHL_LOADING_SCREEN);
         }
 
-        public void NotifyLoadScreenPlayerChampion(int userId, Pair<uint,ClientInfo> player)
+        public void NotifyLoadScreenPlayerChampion(int userId, Tuple<uint,ClientInfo> player)
         {
             var loadChampion = new LoadScreenPlayerChampion(player);
             _packetHandlerManager.SendPacket(userId, loadChampion, Channel.CHL_LOADING_SCREEN);
@@ -481,7 +508,7 @@ namespace PacketDefinitions420
             mods.SenderNetID = unit.NetId;
             mods.Physical = IsPhysical;
             mods.Magical = IsMagical;
-            mods.Ammount = amount;
+            mods.Amount = amount;
             _packetHandlerManager.BroadcastPacket(mods.GetBytes(), Channel.CHL_S2C);
         }
 
@@ -894,7 +921,7 @@ namespace PacketDefinitions420
             var md = new MovementDataStop();
             md.Position = minion.GetPosition();
             md.Forward = new Vector2(0, 1);
-            md.SyncID = 0x0006E4CF; //TODO: generate real movement SyncId
+            md.SyncID = (int)minion.SyncId;
             visionPacket.MovementData = md;
             visionPacket.Packets.Add(spawnPacket);
             visionPacket.SenderNetID = minion.NetId;
@@ -954,7 +981,7 @@ namespace PacketDefinitions420
             {
                 Position = u.GetPosition(),
                 Forward = new Vector2(0, 1),
-                SyncID = 0x0006E4CF //TODO: generate real movement SyncId
+                SyncID = (int)u.SyncId
             };
             enterVis.MovementData = md;
             enterVis.SenderNetID = u.NetId;
